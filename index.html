@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bed Slingshot - Fly Swatter</title>
+    <style>
+        /* Explicit pure white background everywhere so mobile WebView is NEVER black */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            min-height: 100vh;
+            background-color: #ffffff;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        #appRoot {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            touch-action: none;
+        }
+
+        /* Top Score Header */
+        .top-header {
+            position: fixed;
+            top: max(18px, env(safe-area-inset-top));
+            left: 16px;
+            right: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .score-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        #scoreText {
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1;
+            color: #111111;
+            letter-spacing: -1px;
+        }
+
+        #bestText {
+            margin-top: 5px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #333333;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        /* Top-Right Controls: Mute + Rounded Dark Slate-Navy Pause Button (#26323f) */
+        .top-right-controls {
+            position: fixed;
+            top: max(18px, env(safe-area-inset-top));
+            right: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        .icon-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            background-color: #26323f;
+            border: none;
+            box-shadow: 0 4px 12px rgba(38, 50, 63, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto;
+            color: #ffffff;
+            font-size: 18px;
+            transition: transform 0.12s ease, background-color 0.15s ease;
+        }
+
+        .icon-btn:active {
+            transform: scale(0.92);
+            background-color: #1b242e;
+        }
+
+        .icon-btn.mute-btn {
+            background-color: #f3f5f8;
+            color: #1e242b;
+            border: 1.5px solid #d8dde4;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .icon-btn svg {
+            width: 21px;
+            height: 21px;
+            fill: #ffffff;
+        }
+
+        /* Public-Ready Bottom Bar: ONLY the Change Face Pill Button */
+        .bottom-controls {
+            position: fixed;
+            bottom: max(18px, env(safe-area-inset-bottom));
+            left: 16px;
+            right: 16px;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .pill-btn {
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: 2px solid #181a1f;
+            background-color: #ffffff;
+            color: #111111;
+            font-size: 13.5px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transition: transform 0.1s ease, background-color 0.15s ease, color 0.15s ease;
+        }
+
+        .pill-btn:active {
+            transform: scale(0.94);
+        }
+
+        .pill-btn.has-custom {
+            background-color: #26323f;
+            color: #ffffff;
+            border-color: #26323f;
+        }
+
+        /* Clean Pause Modal Overlay */
+        .pause-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 40;
+        }
+
+        .pause-overlay.active {
+            display: flex;
+        }
+
+        .pause-card {
+            width: 100%;
+            max-width: 295px;
+            background-color: #ffffff;
+            border: 3px solid #111111;
+            border-radius: 22px;
+            padding: 24px 20px;
+            text-align: center;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+        }
+
+        .pause-card h2 {
+            margin: 0 0 6px;
+            font-size: 24px;
+            font-weight: 800;
+            color: #111111;
+        }
+
+        .pause-card p {
+            margin: 0 0 18px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #555555;
+        }
+
+        .modal-btn {
+            width: 100%;
+            padding: 13px;
+            border-radius: 14px;
+            border: 2.5px solid #111111;
+            background-color: #26323f;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: transform 0.1s ease;
+        }
+
+        .modal-btn:active {
+            transform: scale(0.97);
+        }
+
+        .modal-btn.secondary {
+            background-color: #f2f4f7;
+            color: #111111;
+            margin-bottom: 0;
+        }
+
+        .sr-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="appRoot">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Top Score Header -->
+    <div class="top-header">
+        <div class="score-stack">
+            <div id="scoreText">0</div>
+            <div id="bestText">BEST 0</div>
+        </div>
+    </div>
+
+    <!-- Top-Right Mute & Rounded Slate-Navy Pause Button -->
+    <div class="top-right-controls">
+        <button class="icon-btn mute-btn" id="muteBtn" aria-label="Toggle Sound" title="Mute / Unmute">
+            <span id="muteIcon">🔊</span>
+        </button>
+        <button class="icon-btn" id="pauseBtn" aria-label="Pause Game" title="Pause">
+            <svg id="pauseSvg" viewBox="0 0 24 24">
+                <rect x="6" y="5" width="4" height="14" rx="1.5"></rect>
+                <rect x="14" y="5" width="4" height="14" rx="1.5"></rect>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Public Bottom Bar: ONLY Change Face Customization -->
+    <div class="bottom-controls">
+        <button class="pill-btn" id="faceBtn" title="Upload Custom Face Photo">
+            <span id="faceBtnLabel">📷 Change Face</span>
+        </button>
+    </div>
+
+    <!-- Hidden Image Input for Custom Face Photo -->
+    <input type="file" id="faceInput" class="sr-input" accept="image/*">
+
+    <!-- Pause Modal Overlay -->
+    <div class="pause-overlay" id="pauseOverlay">
+        <div class="pause-card">
+            <h2>PAUSED</h2>
+            <p id="pauseStats">Score: 0 • Best: 0</p>
+            <button class="modal-btn" id="resumeBtn">RESUME</button>
+            <button class="modal-btn secondary" id="restartBtn">RESTART</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    // --- Safe LocalStorage Helpers ---
+    const STORAGE_KEY = 'bed_slingshot_fly_swatter_best_v1';
+    function loadBestScore() {
+        try {
+            return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10) || 0;
+        } catch (e) {
+            return 0;
+        }
+    }
+    function saveBestScore(val) {
+        try {
+            localStorage.setItem(STORAGE_KEY, String(val));
+        } catch (e) {}
+    }
+
+    // --- DOM References ---
+    const appRoot = document.getElementById('appRoot');
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreText = document.getElementById('scoreText');
+    const bestText = document.getElementById('bestText');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const pauseSvg = document.getElementById('pauseSvg');
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    const pauseStats = document.getElementById('pauseStats');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const muteIcon = document.getElementById('muteIcon');
+    const faceBtn = document.getElementById('faceBtn');
+    const faceBtnLabel = document.getElementById('faceBtnLabel');
+    const faceInput = document.getElementById('faceInput');
+
+    // --- Canvas Sizing & Fallback Dimensions (Never 0x0) ---
+    let viewW = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0, 360);
+    let viewH = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0, 640);
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    // --- Game State ---
+    let score = 0;
+    let bestScore = loadBestScore();
+    let isPaused = false;
+    let isMuted = false;
+    let audioUnlocked = false;
+    let animClock = 0;
+
+    // Custom Uploaded Face Photo
+    let customFaceImg = null;
+
+    // Bed & Character Interactive Anchors
+    let handAnchor = { x: viewW * 0.5, y: viewH * 0.72 };
+    let headHitbox = { x: viewW * 0.36, y: viewH * 0.66, r: 38 };
+    let faceBounceTimer = 0;
+
+    // Classic Slingshot Aiming State
+    let isAiming = false;
+    let aimAngle = -Math.PI / 2; // Straight up default
+    let pullStrength = 1.0;
+    let pointerStart = { x: 0, y: 0 };
+
+    // Projectiles (3D-Shaded White Slingshot Balls) & Hit Effects
+    const projectiles = [];
+    const hitEffects = [];
+
+    // Mosquito Enemy State
+    const mosquito = {
+        x: viewW * 0.3,
+        y: viewH * 0.28,
+        vx: 145,
+        vy: 0,
+        dir: 1,
+        wingPhase: 0,
+        wavePhase: 0,
+        baseY: viewH * 0.28,
+        radius: 22,
+        alive: true,
+        respawnDelay: 0,
+        offscreenPause: 0,
+        proximity: 0.4
+    };
+
+    function resizeCanvas() {
+        try {
+            const rect = appRoot.getBoundingClientRect();
+            const rawW = rect.width || window.innerWidth || document.documentElement.clientWidth || 360;
+            const rawH = rect.height || window.innerHeight || document.documentElement.clientHeight || 640;
+
+            viewW = Math.max(Math.round(rawW), 280);
+            viewH = Math.max(Math.round(rawH), 420);
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            canvas.width = viewW * dpr;
+            canvas.height = viewH * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            mosquito.baseY = Math.max(115, Math.min(viewH * 0.50, mosquito.baseY));
+            mosquito.y = Math.max(105, Math.min(viewH * 0.54, mosquito.y));
+        } catch (err) {
+            console.warn('Resize fallback applied:', err);
+        }
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+        try {
+            const ro = new ResizeObserver(() => resizeCanvas());
+            ro.observe(appRoot);
+        } catch (e) {}
+    }
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 80));
+
+    // --- Built-In Web Audio API Synthesizer (Mosquito Buzz + Slingshot + Hit Sound) ---
+    let audioCtx = null;
+    let buzzOsc1 = null;
+    let buzzOsc2 = null;
+    let buzzFilter = null;
+    let buzzGain = null;
+    let wasMosquitoVisible = false;
+
+    function unlockAudio() {
+        audioUnlocked = true;
+        try {
+            if (!audioCtx) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                audioCtx = new AC();
+
+                // Realistic Mosquito Wing-Buzz Oscillators
+                buzzOsc1 = audioCtx.createOscillator();
+                buzzOsc1.type = 'sawtooth';
+                buzzOsc1.frequency.value = 510;
+
+                buzzOsc2 = audioCtx.createOscillator();
+                buzzOsc2.type = 'triangle';
+                buzzOsc2.frequency.value = 1020;
+
+                const osc2Gain = audioCtx.createGain();
+                osc2Gain.gain.value = 0.35;
+
+                // Fast ~38 Hz wing-beat flutter modulation
+                const wingLfo = audioCtx.createOscillator();
+                wingLfo.type = 'sine';
+                wingLfo.frequency.value = 38;
+                const wingLfoGain = audioCtx.createGain();
+                wingLfoGain.gain.value = 24;
+                wingLfo.connect(wingLfoGain);
+                wingLfoGain.connect(buzzOsc1.frequency);
+
+                // Bandpass filter for authentic nasal mosquito whine
+                buzzFilter = audioCtx.createBiquadFilter();
+                buzzFilter.type = 'bandpass';
+                buzzFilter.frequency.value = 1120;
+                buzzFilter.Q.value = 3.4;
+
+                buzzGain = audioCtx.createGain();
+                buzzGain.gain.value = 0;
+
+                buzzOsc1.connect(buzzFilter);
+                buzzOsc2.connect(osc2Gain);
+                osc2Gain.connect(buzzFilter);
+                buzzFilter.connect(buzzGain);
+                buzzGain.connect(audioCtx.destination);
+
+                buzzOsc1.start();
+                buzzOsc2.start();
+                wingLfo.start();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        } catch (e) {}
+    }
+
+    // Compute real-time proximity between mosquito and sleeping character's head/bed
+    function computeMosquitoProximity() {
+        if (!mosquito.alive) return 0;
+
+        // Strictly silent whenever mosquito leaves visible background bounds
+        const isInsideScreen = (
+            mosquito.x >= -12 &&
+            mosquito.x <= viewW + 12 &&
+            mosquito.y >= -12 &&
+            mosquito.y <= viewH + 12
+        );
+        if (!isInsideScreen) return 0;
+
+        const edgeFadeX = Math.min(
+            Math.max((mosquito.x + 12) / 36, 0),
+            Math.max((viewW + 12 - mosquito.x) / 36, 0),
+            1
+        );
+        const edgeFadeY = Math.min(
+            Math.max((mosquito.y + 12) / 36, 0),
+            Math.max((viewH + 12 - mosquito.y) / 36, 0),
+            1
+        );
+        const edgeFactor = edgeFadeX * edgeFadeY;
+
+        const dist = Math.hypot(mosquito.x - headHitbox.x, mosquito.y - headHitbox.y);
+        const maxDist = Math.max(viewH * 0.68, 360);
+        const minDist = 75;
+        const normalized = 1 - Math.min(Math.max((dist - minDist) / (maxDist - minDist), 0), 1);
+
+        const proxCurve = 0.14 + Math.pow(normalized, 1.65) * 0.86;
+        return proxCurve * edgeFactor;
+    }
+
+    function stopAndResetEntryAudio() {
+        wasMosquitoVisible = false;
+        if (buzzGain && audioCtx) {
+            try {
+                buzzGain.gain.cancelScheduledValues(audioCtx.currentTime);
+                buzzGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            } catch (e) {}
+        }
+    }
+
+    function updateContinuousMosquitoBuzz() {
+        const proximity = computeMosquitoProximity();
+        mosquito.proximity = proximity;
+
+        const isVisibleOnScreen = mosquito.alive && proximity > 0.001;
+        const justEnteredScreen = isVisibleOnScreen && !wasMosquitoVisible;
+        wasMosquitoVisible = isVisibleOnScreen;
+
+        const shouldPlay = audioUnlocked && !isMuted && !isPaused && isVisibleOnScreen;
+
+        if (!audioCtx || !buzzGain || !buzzOsc1 || !buzzOsc2 || !buzzFilter) return;
+        try {
+            const now = audioCtx.currentTime;
+            if (!shouldPlay) {
+                buzzGain.gain.cancelScheduledValues(now);
+                buzzGain.gain.setValueAtTime(0, now);
+                return;
+            }
+
+            if (justEnteredScreen) {
+                buzzGain.gain.cancelScheduledValues(now);
+                buzzGain.gain.setValueAtTime(0.001, now);
+            }
+
+            const dopplerShift = (-mosquito.vx * (mosquito.x - headHitbox.x) > 0) ? 14 : -10;
+            const baseFreq = 455 + proximity * 155 + dopplerShift;
+            const targetGain = 0.015 + proximity * 0.175;
+            const filterFreq = 920 + proximity * 460;
+
+            buzzOsc1.frequency.setTargetAtTime(baseFreq, now, 0.06);
+            buzzOsc2.frequency.setTargetAtTime(baseFreq * 2.0, now, 0.06);
+            buzzFilter.frequency.setTargetAtTime(filterFreq, now, 0.06);
+            buzzGain.gain.setTargetAtTime(targetGain, now, 0.04);
+        } catch (e) {}
+    }
+
+    // Crisp elastic slingshot release sound
+    function playSlingshotReleaseSound() {
+        if (isMuted) return;
+        try {
+            unlockAudio();
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(190, now);
+            osc.frequency.exponentialRampToValueAtTime(520, now + 0.075);
+            osc.frequency.exponentialRampToValueAtTime(140, now + 0.16);
+
+            gain.gain.setValueAtTime(0.28, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.18);
+        } catch (e) {}
+    }
+
+    // Built-in comic slap + happy chime on mosquito hit
+    function playHitSound() {
+        if (isMuted) return;
+        try {
+            unlockAudio();
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+
+            // 1. Crisp comic slap burst
+            const slapLen = Math.floor(audioCtx.sampleRate * 0.10);
+            const slapBuf = audioCtx.createBuffer(1, slapLen, audioCtx.sampleRate);
+            const ch = slapBuf.getChannelData(0);
+            for (let i = 0; i < slapLen; i++) {
+                ch[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.02));
+            }
+            const slapSrc = audioCtx.createBufferSource();
+            slapSrc.buffer = slapBuf;
+
+            const slapFilter = audioCtx.createBiquadFilter();
+            slapFilter.type = 'bandpass';
+            slapFilter.frequency.value = 1100;
+
+            const slapGain = audioCtx.createGain();
+            slapGain.gain.setValueAtTime(0.45, now);
+            slapGain.gain.exponentialRampToValueAtTime(0.01, now + 0.10);
+
+            slapSrc.connect(slapFilter);
+            slapFilter.connect(slapGain);
+            slapGain.connect(audioCtx.destination);
+            slapSrc.start(now);
+
+            // 2. Cheerful two-note pop chime (+1)
+            const notes = [587.33, 880.0]; // D5 -> A5
+            notes.forEach((freq, idx) => {
+                const t = now + 0.03 + idx * 0.065;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, t);
+
+                gain.gain.setValueAtTime(0.24, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.23);
+            });
+        } catch (e) {}
+    }
+
+    // --- Score & Pause Button UI Sync ---
+    function updateHUD() {
+        scoreText.textContent = String(score);
+        if (score > bestScore) {
+            bestScore = score;
+            saveBestScore(bestScore);
+        }
+        bestText.textContent = `BEST ${bestScore}`;
+    }
+
+    function syncPauseIcon() {
+        if (isPaused) {
+            pauseSvg.innerHTML = '<polygon points="7,5 19,12 7,19"></polygon>';
+        } else {
+            pauseSvg.innerHTML = '<rect x="6" y="5" width="4" height="14" rx="1.5"></rect><rect x="14" y="5" width="4" height="14" rx="1.5"></rect>';
+        }
+    }
+
+    // --- Mosquito Spawning & Flight Dynamics ---
+    function spawnMosquito() {
+        stopAndResetEntryAudio();
+        const fromLeft = Math.random() < 0.5;
+        const speedBoost = Math.min(score * 3.2, 165);
+        const speed = 150 + Math.random() * 55 + speedBoost;
+
+        mosquito.dir = fromLeft ? 1 : -1;
+        mosquito.x = fromLeft ? -28 : viewW + 28;
+        mosquito.baseY = Math.max(125, Math.min(viewH * 0.48, viewH * (0.19 + Math.random() * 0.26)));
+        mosquito.y = mosquito.baseY;
+        mosquito.vx = mosquito.dir * speed;
+        mosquito.wavePhase = Math.random() * Math.PI * 2;
+        mosquito.alive = true;
+        mosquito.offscreenPause = 0;
+    }
+
+    function updateMosquito(dt) {
+        if (!mosquito.alive) {
+            mosquito.respawnDelay -= dt;
+            if (mosquito.respawnDelay <= 0) {
+                spawnMosquito();
+            }
+            return;
+        }
+
+        if (mosquito.offscreenPause > 0) {
+            mosquito.offscreenPause -= dt;
+            if (mosquito.offscreenPause <= 0) {
+                const fromLeft = Math.random() < 0.5;
+                const speedBoost = Math.min(score * 3.2, 165);
+                const speed = 150 + Math.random() * 55 + speedBoost;
+                mosquito.dir = fromLeft ? 1 : -1;
+                mosquito.x = fromLeft ? -28 : viewW + 28;
+                mosquito.baseY = Math.max(125, Math.min(viewH * 0.48, viewH * (0.19 + Math.random() * 0.26)));
+                mosquito.vx = mosquito.dir * speed;
+            }
+            return;
+        }
+
+        mosquito.wingPhase += dt * 62;
+        mosquito.wavePhase += dt * 4.4;
+        mosquito.x += mosquito.vx * dt;
+        mosquito.y = mosquito.baseY + Math.sin(mosquito.wavePhase) * 24;
+
+        // When mosquito exits screen bounds, pause briefly offscreen (sound stops automatically)
+        if (mosquito.dir === 1 && mosquito.x > viewW + 34) {
+            mosquito.offscreenPause = 0.75 + Math.random() * 0.65;
+            stopAndResetEntryAudio();
+        } else if (mosquito.dir === -1 && mosquito.x < -34) {
+            mosquito.offscreenPause = 0.75 + Math.random() * 0.65;
+            stopAndResetEntryAudio();
+        }
+    }
+
+    // --- Classic Single White Ball Launch & Hit Burst Effects ---
+    function fireSlingshotBall() {
+        const speed = 1380 + pullStrength * 420;
+        const dx = Math.cos(aimAngle);
+        const dy = Math.sin(aimAngle);
+
+        projectiles.push({
+            x: handAnchor.x + dx * 16,
+            y: handAnchor.y + dy * 16,
+            vx: dx * speed,
+            vy: dy * speed,
+            r: 10.5,
+            trail: []
+        });
+
+        playSlingshotReleaseSound();
+    }
+
+    function spawnHitBurst(x, y) {
+        const confettiColors = [
+            '#d92626', // red
+            '#181a1f', // ink black
+            '#f5c84c', // golden yellow
+            '#f28b9c', // soft pink
+            '#8d939c', // grey
+            '#4f86f7'  // accent blue
+        ];
+
+        const particles = [];
+        for (let i = 0; i < 24; i++) {
+            const ang = (i / 24) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+            const spd = 45 + Math.random() * 175;
+            particles.push({
+                x: x + (Math.random() - 0.5) * 14,
+                y: y + (Math.random() - 0.5) * 14,
+                vx: Math.cos(ang) * spd,
+                vy: Math.sin(ang) * spd - 20,
+                size: 3 + Math.random() * 4.5,
+                isRect: Math.random() < 0.55,
+                rot: Math.random() * Math.PI * 2,
+                vRot: (Math.random() - 0.5) * 12,
+                color: confettiColors[i % confettiColors.length]
+            });
+        }
+
+        hitEffects.push({
+            x,
+            y,
+            ringRadius: 12,
+            maxRingRadius: 56,
+            plusY: y - 6,
+            alpha: 1.0,
+            particles
+        });
+    }
+
+    function updateProjectilesAndEffects(dt) {
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i];
+            p.trail.push({ x: p.x, y: p.y });
+            if (p.trail.length > 12) p.trail.shift();
+
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+
+            // Check collision with mosquito
+            if (mosquito.alive && mosquito.offscreenPause <= 0) {
+                const dist = Math.hypot(p.x - mosquito.x, p.y - mosquito.y);
+                if (dist <= mosquito.radius + p.r + 8) {
+                    mosquito.alive = false;
+                    mosquito.respawnDelay = 0.52;
+                    stopAndResetEntryAudio();
+                    score += 1;
+                    updateHUD();
+                    faceBounceTimer = 0.42;
+                    spawnHitBurst(mosquito.x, mosquito.y);
+                    playHitSound();
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+            }
+
+            // Remove offscreen ball
+            if (p.x < -80 || p.x > viewW + 80 || p.y < -80 || p.y > viewH + 80) {
+                projectiles.splice(i, 1);
+            }
+        }
+
+        for (let i = hitEffects.length - 1; i >= 0; i--) {
+            const fx = hitEffects[i];
+            fx.ringRadius += (fx.maxRingRadius - fx.ringRadius) * Math.min(1, 14 * dt);
+            fx.plusY -= 38 * dt;
+            fx.alpha -= dt * 1.45;
+
+            for (const pt of fx.particles) {
+                pt.x += pt.vx * dt;
+                pt.y += pt.vy * dt;
+                pt.vy += 180 * dt;
+                pt.vx *= 0.94;
+                pt.rot += pt.vRot * dt;
+            }
+
+            if (fx.alpha <= 0) {
+                hitEffects.splice(i, 1);
+            }
+        }
+
+        if (faceBounceTimer > 0) {
+            faceBounceTimer = Math.max(0, faceBounceTimer - dt);
+        }
+    }
+
+    // --- Hand-Drawn Sketchy Rendering ---
+    function drawWhiteBackground() {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, viewW, viewH);
+    }
+
+    function drawBedAndCharacter() {
+        ctx.save();
+
+        const scale = Math.min(Math.max(viewW / 390, 0.85), 1.32);
+        const cx = viewW * 0.48;
+        const cy = viewH * 0.74;
+
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 1. Thick Black Headboard (Left side, angled isometric)
+        ctx.fillStyle = '#18191c';
+        ctx.beginPath();
+        ctx.moveTo(-124, -46);
+        ctx.quadraticCurveTo(-82, -62, -40, -76);
+        ctx.quadraticCurveTo(-38, -42, -40, -10);
+        ctx.lineTo(-122, 18);
+        ctx.quadraticCurveTo(-125, -14, -124, -46);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner headboard panel highlight
+        ctx.fillStyle = '#2d3036';
+        ctx.beginPath();
+        ctx.moveTo(-113, -38);
+        ctx.lineTo(-50, -60);
+        ctx.lineTo(-50, -18);
+        ctx.lineTo(-113, 4);
+        ctx.closePath();
+        ctx.fill();
+
+        // Back-left thick bed leg
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.moveTo(-122, 18);
+        ctx.lineTo(-122, 48);
+        ctx.lineTo(-111, 48);
+        ctx.lineTo(-111, 22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 2. Dark Grey Side Mattress Panel (#7b8086)
+        ctx.fillStyle = '#7b8086';
+        ctx.beginPath();
+        ctx.moveTo(-114, 16);
+        ctx.quadraticCurveTo(-36, 40, 46, 62);
+        ctx.lineTo(46, 86);
+        ctx.quadraticCurveTo(-36, 64, -114, 38);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Right-end side mattress wall
+        ctx.fillStyle = '#686d73';
+        ctx.beginPath();
+        ctx.moveTo(46, 62);
+        ctx.lineTo(120, 34);
+        ctx.lineTo(120, 56);
+        ctx.lineTo(46, 86);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Front-middle & far-right thick black bed legs
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.moveTo(42, 84);
+        ctx.lineTo(42, 108);
+        ctx.lineTo(54, 108);
+        ctx.lineTo(54, 82);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(110, 56);
+        ctx.lineTo(110, 82);
+        ctx.lineTo(121, 82);
+        ctx.lineTo(121, 52);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 3. White Pillow under the Head
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-106, 2);
+        ctx.quadraticCurveTo(-80, -34, -44, -22);
+        ctx.quadraticCurveTo(-32, -8, -56, 12);
+        ctx.quadraticCurveTo(-86, 22, -106, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 4. Light-Medium Grey Main Blanket (#a8adb3)
+        ctx.fillStyle = '#a8adb3';
+        ctx.beginPath();
+        ctx.moveTo(-54, -8);
+        ctx.quadraticCurveTo(32, -24, 114, -4);
+        ctx.quadraticCurveTo(122, 14, 120, 34);
+        ctx.quadraticCurveTo(84, 50, 46, 62);
+        ctx.quadraticCurveTo(-18, 45, -72, 26);
+        ctx.quadraticCurveTo(-66, 6, -54, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Subtle sketchy blanket creases
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = '#878c93';
+        ctx.beginPath();
+        ctx.moveTo(-16, 36);
+        ctx.quadraticCurveTo(16, 42, 42, 54);
+        ctx.moveTo(58, 34);
+        ctx.quadraticCurveTo(86, 28, 112, 22);
+        ctx.stroke();
+
+        // 5. Dark Charcoal-Green Blanket Fold near Pillow (#3c4642)
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 4.2;
+        ctx.fillStyle = '#3c4642';
+        ctx.beginPath();
+        ctx.moveTo(-64, -12);
+        ctx.quadraticCurveTo(-46, -24, -26, -16);
+        ctx.quadraticCurveTo(-36, 12, -48, 34);
+        ctx.quadraticCurveTo(-66, 28, -78, 22);
+        ctx.quadraticCurveTo(-72, 4, -64, -12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 6. Stick-Figure Body & Nervous Trembling/Shaking Hands
+        const baseHandX = 16;
+        const baseHandY = 14;
+        const hipX = 36;
+        const hipY = 18;
+
+        // Nervous micro-tremor that speeds up & intensifies as mosquito gets closer
+        const tremorIntensity = 1.4 + mosquito.proximity * 2.2 + (isAiming ? 0.9 : 0);
+        const shakeX = (Math.sin(animClock * 48) * 0.65 + Math.cos(animClock * 74) * 0.35) * tremorIntensity;
+        const shakeY = (Math.cos(animClock * 54) * 0.65 + Math.sin(animClock * 68) * 0.35) * tremorIntensity;
+
+        const visualHandX = baseHandX + shakeX;
+        const visualHandY = baseHandY + shakeY;
+
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 3.8;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Torso line
+        ctx.beginPath();
+        ctx.moveTo(-28, 2);
+        ctx.lineTo(hipX, hipY);
+        ctx.stroke();
+
+        // Left & Right stick-figure arms trembling toward the clasped shaking hands
+        ctx.beginPath();
+        ctx.moveTo(-24, -4);
+        ctx.quadraticCurveTo(-4 + shakeX * 0.5, -10 + shakeY * 0.5, visualHandX, visualHandY);
+        ctx.moveTo(-22, 8);
+        ctx.quadraticCurveTo(-2 + shakeX * 0.5, 22 + shakeY * 0.5, visualHandX, visualHandY);
+        ctx.stroke();
+
+        // Upper & Lower stick-figure legs extending toward the right foot of the bed
+        ctx.beginPath();
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(86, 4);
+        ctx.lineTo(94, 10);
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(92, 22);
+        ctx.lineTo(100, 17);
+        ctx.stroke();
+
+        // Clasped hands holding the slingshot
+        ctx.fillStyle = '#f3c5a2';
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(visualHandX, visualHandY, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Keep slingshot pivot anchor steady in world coordinates
+        handAnchor = {
+            x: cx + baseHandX * scale,
+            y: cy + baseHandY * scale
+        };
+
+        // 7. Oversized Tilted Cartoon Meme Face Resting on Pillow (or User's Uploaded Photo)
+        const headX = -68;
+        const headY = -20;
+        const headRx = 28;
+        const headRy = 33;
+
+        headHitbox = {
+            x: cx + headX * scale,
+            y: cy + headY * scale,
+            r: 40 * scale
+        };
+
+        const bounceProgress = faceBounceTimer > 0 ? Math.sin((faceBounceTimer / 0.42) * Math.PI * 3) : 0;
+        const squashX = 1 + bounceProgress * 0.11;
+        const squashY = 1 - bounceProgress * 0.11;
+
+        ctx.save();
+        ctx.translate(headX, headY);
+        ctx.rotate(-0.24 + bounceProgress * 0.08);
+        ctx.scale(squashX, squashY);
+
+        if (customFaceImg) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.ellipse(0, 0, headRx, headRy, 0, 0, Math.PI * 2);
+            ctx.clip();
+
+            const aspect = customFaceImg.width / customFaceImg.height;
+            let dw = headRx * 2.15;
+            let dh = headRy * 2.15;
+            if (aspect > 1) dw = dh * aspect;
+            else dh = dw / aspect;
+
+            ctx.drawImage(customFaceImg, -dw * 0.5, -dh * 0.5, dw, dh);
+            ctx.restore();
+
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 3.2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, headRx, headRy, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            // Face base
+            ctx.fillStyle = '#f2be98';
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 3.0;
+            ctx.beginPath();
+            ctx.ellipse(0, 2, headRx - 1, headRy - 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Messy brown hair
+            ctx.fillStyle = '#5c3824';
+            ctx.beginPath();
+            ctx.moveTo(-26, 2);
+            ctx.quadraticCurveTo(-34, -22, -14, -33);
+            ctx.quadraticCurveTo(4, -38, 22, -24);
+            ctx.quadraticCurveTo(28, -14, 24, -6);
+            ctx.quadraticCurveTo(10, -20, -8, -18);
+            ctx.quadraticCurveTo(-20, -14, -26, 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Grey beard & mustache
+            ctx.fillStyle = '#cfd3d8';
+            ctx.strokeStyle = '#4a4e54';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.moveTo(-22, 6);
+            ctx.quadraticCurveTo(-24, 30, 0, 34);
+            ctx.quadraticCurveTo(24, 30, 22, 6);
+            ctx.quadraticCurveTo(14, 14, 0, 12);
+            ctx.quadraticCurveTo(-14, 14, -22, 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Open laughing/shouting mouth
+            ctx.fillStyle = '#6b141a';
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.ellipse(1, 18, 9.5, 7.5 + Math.abs(bounceProgress) * 2.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Upper teeth row
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.rect(-6, 12, 14, 3.5);
+            ctx.fill();
+
+            // Thick black-rimmed glasses
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 3.0;
+
+            ctx.beginPath();
+            ctx.roundRect(-19, -9, 16, 13, 3.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.roundRect(2, -9, 16, 13, 3.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(-3, -3);
+            ctx.lineTo(2, -3);
+            ctx.stroke();
+
+            // Expressive pupils tracking the mosquito
+            const lookAng = Math.atan2(mosquito.y - headHitbox.y, mosquito.x - headHitbox.x);
+            const px = Math.cos(lookAng) * 2.3;
+            const py = Math.sin(lookAng) * 2.3;
+            ctx.fillStyle = '#111111';
+            ctx.beginPath();
+            ctx.arc(-11 + px, -2.5 + py, 2.5, 0, Math.PI * 2);
+            ctx.arc(10 + px, -2.5 + py, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+        ctx.restore();
+    }
+
+    function drawAimingDashedLineAndBall() {
+        if (!isAiming) return;
+
+        ctx.save();
+        const dx = Math.cos(aimAngle);
+        const dy = Math.sin(aimAngle);
+
+        const rayLength = Math.max(viewH * 1.25, 900);
+        const originX = handAnchor.x;
+        const originY = handAnchor.y;
+        const endX = originX + dx * rayLength;
+        const endY = originY + dy * rayLength;
+
+        // Bold black dashed trajectory line (`setLineDash([8, 8])`)
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 3.4;
+        ctx.lineCap = 'round';
+        ctx.setLineDash([8, 8]);
+
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 3D-shaded white slingshot ball & aiming reticle near the hands
+        const reticleDist = 28 + pullStrength * 10;
+        const bx = originX + dx * reticleDist;
+        const by = originY + dy * reticleDist;
+        const br = 10.5;
+
+        const ballGrad = ctx.createRadialGradient(bx - 3, by - 3, 1.5, bx, by, br);
+        ballGrad.addColorStop(0, '#ffffff');
+        ballGrad.addColorStop(0.65, '#edf0f5');
+        ballGrad.addColorStop(1, '#b8c0cc');
+
+        ctx.fillStyle = ballGrad;
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.arc(bx, by, br, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Subtle outer aiming ring around ball
+        ctx.strokeStyle = 'rgba(17, 17, 17, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(bx, by, br + 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function drawProjectiles() {
+        for (const p of projectiles) {
+            // Soft peach motion trail behind the white ball
+            if (p.trail.length > 1) {
+                for (let i = 1; i < p.trail.length; i++) {
+                    const ratio = i / p.trail.length;
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(247, 178, 134, ${ratio * 0.55})`;
+                    ctx.lineWidth = p.r * 1.55 * ratio;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
+                    ctx.lineTo(p.trail[i].x, p.trail[i].y);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            // 3D-shaded white ball
+            ctx.save();
+            const grad = ctx.createRadialGradient(p.x - 3, p.y - 3, 1.5, p.x, p.y, p.r);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.65, '#eef1f6');
+            grad.addColorStop(1, '#b5bec9');
+
+            ctx.fillStyle = grad;
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawMosquito() {
+        if (!mosquito.alive || mosquito.offscreenPause > 0) return;
+
+        ctx.save();
+        ctx.translate(mosquito.x, mosquito.y);
+        ctx.scale(mosquito.dir, 1);
+
+        const flap = Math.sin(mosquito.wingPhase) * 0.45;
+        ctx.save();
+        ctx.translate(-2, -4);
+        ctx.rotate(-0.45 + flap);
+        ctx.fillStyle = 'rgba(220, 226, 234, 0.72)';
+        ctx.strokeStyle = '#555b64';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(-8, -7, 13, 5.2, -0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-2, -4);
+        ctx.lineTo(-16, -9);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(1, -5);
+        ctx.rotate(-0.2 - flap);
+        ctx.fillStyle = 'rgba(235, 240, 246, 0.8)';
+        ctx.strokeStyle = '#555b64';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(-6, -9, 12, 4.8, -0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // 6 Thin jointed legs
+        ctx.strokeStyle = '#181a1f';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(5, 2);  ctx.lineTo(12, 8);  ctx.lineTo(16, 15);
+        ctx.moveTo(4, 3);  ctx.lineTo(9, 11);  ctx.lineTo(12, 18);
+        ctx.moveTo(0, 3);  ctx.lineTo(-3, 12); ctx.lineTo(1, 19);
+        ctx.moveTo(-2, 3); ctx.lineTo(-7, 12); ctx.lineTo(-4, 19);
+        ctx.moveTo(-6, 2); ctx.lineTo(-15, 9); ctx.lineTo(-22, 16);
+        ctx.moveTo(-7, 1); ctx.lineTo(-17, 5); ctx.lineTo(-25, 11);
+        ctx.stroke();
+
+        // Red blood-filled striped abdomen (#d92626)
+        ctx.save();
+        ctx.rotate(-0.22);
+        ctx.fillStyle = '#d92626';
+        ctx.strokeStyle = '#181a1f';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(-10, 1, 9.5, 5.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#3b0909';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(-7, -3.5);  ctx.lineTo(-7, 5.5);
+        ctx.moveTo(-11, -4);   ctx.lineTo(-11, 6);
+        ctx.moveTo(-15, -3);   ctx.lineTo(-15, 5);
+        ctx.stroke();
+        ctx.restore();
+
+        // Dark thorax
+        ctx.fillStyle = '#252830';
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(1, -1, 5.5, 4.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Head & sharp proboscis needle
+        ctx.fillStyle = '#181a1f';
+        ctx.beginPath();
+        ctx.arc(8, -1, 3.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(9, -2, 1.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(11, 0);
+        ctx.lineTo(20, 4);
+        ctx.stroke();
+
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(10, -3);
+        ctx.lineTo(15, -8);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function drawHitEffects() {
+        for (const fx of hitEffects) {
+            const alpha = Math.max(0, fx.alpha);
+            ctx.save();
+
+            // Golden-yellow expanding shockwave ring (#f5c84c)
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = '#f5c84c';
+            ctx.lineWidth = 3.2;
+            ctx.beginPath();
+            ctx.arc(fx.x, fx.y, fx.ringRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Colorful tiny confetti burst
+            for (const pt of fx.particles) {
+                ctx.save();
+                ctx.translate(pt.x, pt.y);
+                ctx.rotate(pt.rot);
+                ctx.fillStyle = pt.color;
+                if (pt.isRect) {
+                    ctx.fillRect(-pt.size * 0.6, -pt.size * 0.4, pt.size * 1.2, pt.size * 0.8);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, pt.size * 0.55, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // Floating "+1" text rising gently at hit spot
+            ctx.fillStyle = '#111111';
+            ctx.font = '800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('+1', fx.x, fx.plusY);
+
+            ctx.restore();
+        }
+    }
+
+    // --- Main Render & Simulation Loop ---
+    let lastTime = 0;
+
+    function renderFrame(timestamp) {
+        try {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+            lastTime = timestamp;
+
+            if (!isPaused) {
+                animClock += dt;
+                updateMosquito(dt);
+                updateProjectilesAndEffects(dt);
+            }
+            updateContinuousMosquitoBuzz();
+
+            drawWhiteBackground();
+            drawBedAndCharacter();
+            drawAimingDashedLineAndBall();
+            drawProjectiles();
+            drawMosquito();
+            drawHitEffects();
+        } catch (err) {
+            console.error('Render loop guarded error:', err);
+        }
+
+        requestAnimationFrame(renderFrame);
+    }
+
+    // --- Touch & Mouse Slingshot Controls ---
+    function getClientCoords(e) {
+        if (e.touches && e.touches.length > 0) {
+            return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function updateAimFromPoint(pt) {
+        let dx = pt.x - handAnchor.x;
+        let dy = pt.y - handAnchor.y;
+
+        // Supports both direct upward aiming and classic downward pull-back slingshot drag
+        if (dy > 18) {
+            dx = pointerStart.x - pt.x;
+            dy = pointerStart.y - pt.y;
+        }
+
+        const dist = Math.hypot(dx, dy);
+        pullStrength = Math.min(Math.max(dist / 160, 0.4), 1.35);
+
+        if (dist < 6) {
+            aimAngle = -Math.PI / 2;
+            return;
+        }
+
+        let ang = Math.atan2(dy, dx);
+        const minAng = -Math.PI * 0.90;
+        const maxAng = -Math.PI * 0.10;
+        if (ang > 0) {
+            ang = dx < 0 ? minAng : maxAng;
+        } else {
+            ang = Math.max(minAng, Math.min(maxAng, ang));
+        }
+        aimAngle = ang;
+    }
+
+    function handlePointerDown(e) {
+        if (isPaused) return;
+        const pt = getClientCoords(e);
+
+        unlockAudio();
+
+        // Tapping directly on the sleeping character's face opens the photo picker
+        if (Math.hypot(pt.x - headHitbox.x, pt.y - headHitbox.y) <= headHitbox.r) {
+            faceInput.click();
+            return;
+        }
+
+        isAiming = true;
+        pointerStart = { x: pt.x, y: pt.y };
+        updateAimFromPoint(pt);
+    }
+
+    function handlePointerMove(e) {
+        if (!isAiming || isPaused) return;
+        if (e.cancelable) e.preventDefault();
+        const pt = getClientCoords(e);
+        updateAimFromPoint(pt);
+    }
+
+    function handlePointerUp() {
+        if (!isAiming) return;
+        isAiming = false;
+        if (!isPaused) {
+            fireSlingshotBall();
+        }
+    }
+
+    canvas.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+
+    canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    window.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
+
+    // --- Pause, Mute & Custom Face Upload Handlers ---
+    pauseBtn.addEventListener('click', () => {
+        isPaused = !isPaused;
+        isAiming = false;
+        syncPauseIcon();
+        updateContinuousMosquitoBuzz();
+        if (isPaused) {
+            pauseStats.textContent = `Score: ${score}  •  Best: ${bestScore}`;
+            pauseOverlay.classList.add('active');
+        } else {
+            lastTime = performance.now();
+            pauseOverlay.classList.remove('active');
+        }
+    });
+
+    resumeBtn.addEventListener('click', () => {
+        isPaused = false;
+        syncPauseIcon();
+        lastTime = performance.now();
+        pauseOverlay.classList.remove('active');
+        updateContinuousMosquitoBuzz();
+    });
+
+    restartBtn.addEventListener('click', () => {
+        score = 0;
+        updateHUD();
+        projectiles.length = 0;
+        hitEffects.length = 0;
+        isPaused = false;
+        syncPauseIcon();
+        lastTime = performance.now();
+        pauseOverlay.classList.remove('active');
+        spawnMosquito();
+    });
+
+    muteBtn.addEventListener('click', () => {
+        unlockAudio();
+        isMuted = !isMuted;
+        muteIcon.textContent = isMuted ? '🔇' : '🔊';
+        updateContinuousMosquitoBuzz();
+    });
+
+    faceBtn.addEventListener('click', () => {
+        unlockAudio();
+        faceInput.click();
+    });
+
+    faceInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+                customFaceImg = img;
+                faceBtn.classList.add('has-custom');
+                faceBtnLabel.textContent = '📷 Face Set';
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+        faceInput.value = '';
+    });
+
+    // --- Synchronous Initial Draw Before Animation Loop (Zero-Black-Screen Guarantee) ---
+    updateHUD();
+    syncPauseIcon();
+    resizeCanvas();
+    drawWhiteBackground();
+    drawBedAndCharacter();
+    drawMosquito();
+    requestAnimationFrame(renderFrame);
+})();
+</script>
+</body>
+</html>
