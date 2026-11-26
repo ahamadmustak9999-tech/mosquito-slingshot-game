@@ -403,15 +403,88 @@
     let buzzGain = null;
     let wasMosquitoVisible = false;
 
+    // External Audio Files from GitHub Repository (./sounds/entry.mp3 & ./sounds/hit.mp3)
+    const ENTRY_AUDIO_SRC = './sounds/entry.mp3';
+    const HIT_AUDIO_SRC = './sounds/hit.mp3';
+
+    let entryAudioEl = null;
+    let entryAudioReady = false;
+    let entryAudioFailed = false;
+    let entryAudioPlaying = false;
+
+    let hitAudioEl = null;
+    let hitAudioReady = false;
+    let hitAudioFailed = false;
+
+    function initExternalAudio() {
+        try {
+            if (!entryAudioEl) {
+                entryAudioEl = new Audio(ENTRY_AUDIO_SRC);
+                entryAudioEl.preload = 'auto';
+                entryAudioEl.loop = true;
+                entryAudioEl.playsInline = true;
+
+                entryAudioEl.addEventListener('canplaythrough', () => {
+                    entryAudioReady = true;
+                    entryAudioFailed = false;
+                });
+                entryAudioEl.addEventListener('loadeddata', () => {
+                    entryAudioReady = true;
+                    entryAudioFailed = false;
+                });
+                entryAudioEl.addEventListener('error', () => {
+                    entryAudioReady = false;
+                    entryAudioFailed = true;
+                    entryAudioPlaying = false;
+                });
+            }
+
+            if (!hitAudioEl) {
+                hitAudioEl = new Audio(HIT_AUDIO_SRC);
+                hitAudioEl.preload = 'auto';
+                hitAudioEl.playsInline = true;
+
+                hitAudioEl.addEventListener('canplaythrough', () => {
+                    hitAudioReady = true;
+                    hitAudioFailed = false;
+                });
+                hitAudioEl.addEventListener('loadeddata', () => {
+                    hitAudioReady = true;
+                    hitAudioFailed = false;
+                });
+                hitAudioEl.addEventListener('error', () => {
+                    hitAudioReady = false;
+                    hitAudioFailed = true;
+                });
+            }
+        } catch (e) {
+            entryAudioFailed = true;
+            hitAudioFailed = true;
+        }
+    }
+
+    initExternalAudio();
+
     function unlockAudio() {
         audioUnlocked = true;
+        initExternalAudio();
+
+        try {
+            if (entryAudioEl && !entryAudioFailed && entryAudioEl.readyState === 0) {
+                entryAudioEl.load();
+            }
+            if (hitAudioEl && !hitAudioFailed && hitAudioEl.readyState === 0) {
+                hitAudioEl.load();
+            }
+        } catch (e) {}
+
         try {
             if (!audioCtx) {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 if (!AC) return;
                 audioCtx = new AC();
 
-                // Realistic Mosquito Wing-Buzz Oscillators
+                // Realistic Mosquito Wing-Buzz Oscillators (fallback when ./sounds/entry.mp3 is unavailable)
                 buzzOsc1 = audioCtx.createOscillator();
                 buzzOsc1.type = 'sawtooth';
                 buzzOsc1.frequency.value = 510;
@@ -491,8 +564,43 @@
         return proxCurve * edgeFactor;
     }
 
+    function pauseEntryAudioFile() {
+        if (!entryAudioEl) return;
+        try {
+            entryAudioEl.pause();
+            entryAudioEl.currentTime = 0;
+        } catch (e) {}
+        entryAudioPlaying = false;
+    }
+
+    function startEntryAudioFileFromZero() {
+        if (!entryAudioEl || entryAudioFailed) return false;
+        try {
+            entryAudioEl.muted = isMuted;
+            entryAudioEl.volume = 0.95;
+            entryAudioEl.currentTime = 0;
+            const playPromise = entryAudioEl.play();
+            if (playPromise && typeof playPromise.then === 'function') {
+                playPromise.then(() => {
+                    entryAudioReady = true;
+                    entryAudioFailed = false;
+                    entryAudioPlaying = true;
+                }).catch(() => {
+                    entryAudioPlaying = false;
+                });
+            } else {
+                entryAudioPlaying = true;
+            }
+            return true;
+        } catch (e) {
+            entryAudioPlaying = false;
+            return false;
+        }
+    }
+
     function stopAndResetEntryAudio() {
         wasMosquitoVisible = false;
+        pauseEntryAudioFile();
         if (buzzGain && audioCtx) {
             try {
                 buzzGain.gain.cancelScheduledValues(audioCtx.currentTime);
@@ -511,10 +619,29 @@
 
         const shouldPlay = audioUnlocked && !isMuted && !isPaused && isVisibleOnScreen;
 
+        // Handle external ./sounds/entry.mp3 while visible on screen
+        if (entryAudioEl && !entryAudioFailed) {
+            try {
+                entryAudioEl.muted = isMuted;
+                entryAudioEl.volume = Math.min(1, Math.max(0.25, 0.35 + proximity * 0.65));
+
+                if (!shouldPlay) {
+                    if (!entryAudioEl.paused || entryAudioEl.currentTime > 0) {
+                        pauseEntryAudioFile();
+                    }
+                } else if (justEnteredScreen || entryAudioEl.paused) {
+                    startEntryAudioFileFromZero();
+                }
+            } catch (e) {}
+        }
+
+        // Use Web Audio buzz fallback only if ./sounds/entry.mp3 is unavailable or blocked
+        const useSynthFallback = entryAudioFailed || !entryAudioEl || (!entryAudioReady && !entryAudioPlaying);
+
         if (!audioCtx || !buzzGain || !buzzOsc1 || !buzzOsc2 || !buzzFilter) return;
         try {
             const now = audioCtx.currentTime;
-            if (!shouldPlay) {
+            if (!shouldPlay || !useSynthFallback) {
                 buzzGain.gain.cancelScheduledValues(now);
                 buzzGain.gain.setValueAtTime(0, now);
                 return;
@@ -562,11 +689,42 @@
         } catch (e) {}
     }
 
-    // Built-in comic slap + happy chime on mosquito hit
+    // Play ./sounds/hit.mp3 on mosquito hit, with clean Web Audio fallback if needed
     function playHitSound() {
         if (isMuted) return;
+        unlockAudio();
+
+        let playedExternalHit = false;
+        if (hitAudioEl && !hitAudioFailed) {
+            try {
+                hitAudioEl.muted = isMuted;
+                hitAudioEl.volume = 1.0;
+                hitAudioEl.currentTime = 0;
+                const p = hitAudioEl.play();
+                if (p && typeof p.then === 'function') {
+                    p.then(() => {
+                        hitAudioReady = true;
+                        hitAudioFailed = false;
+                    }).catch(() => {
+                        playSynthHitFallback();
+                    });
+                    playedExternalHit = true;
+                } else {
+                    playedExternalHit = true;
+                }
+            } catch (e) {
+                playedExternalHit = false;
+            }
+        }
+
+        if (!playedExternalHit) {
+            playSynthHitFallback();
+        }
+    }
+
+    function playSynthHitFallback() {
+        if (isMuted) return;
         try {
-            unlockAudio();
             if (!audioCtx) return;
             const now = audioCtx.currentTime;
 
@@ -1510,6 +1668,12 @@
         unlockAudio();
         isMuted = !isMuted;
         muteIcon.textContent = isMuted ? '🔇' : '🔊';
+        if (entryAudioEl) {
+            entryAudioEl.muted = isMuted;
+        }
+        if (hitAudioEl) {
+            hitAudioEl.muted = isMuted;
+        }
         updateContinuousMosquitoBuzz();
     });
 
